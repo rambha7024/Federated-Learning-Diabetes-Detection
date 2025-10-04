@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Prediction Result</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f2f2;
+      padding: 20px;
+    }
+    .container {
+      width: 400px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    h2 { margin-bottom: 20px; }
+    .result {
+      font-size: 20px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+    .non-diabetic { color: green; }
+    .diabetic { color: red; }
+    .error { color: orange; }
+    a {
+      display: inline-block;
+      margin-top: 15px;
+      text-decoration: none;
+      background: #007bff;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+    }
+    a:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Prediction Result</h2>
+    <div class="result {{ css_class }}">
+      {{ prediction_text }} <br>
+      Probability: {{ probability }}
+    </div>
+    <a href="/">🔙 Back to Home</a>
+  </div>
+</body>
+</html>
