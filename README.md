@@ -1,34 +1,33 @@
-# Federated-Learning-Diabetes-Detection
-Federated Learning-Based Privacy-Preserving Diabetes Detection with Encrypted Computation
-# Federated Learning - Privacy-Preserving Diabetes Detection
+# 🩺 Federated Learning - Privacy-Preserving Diabetes Detection
 
 📌 **Final Year Project**  
-🔬 **Author:** Rambha Rasmitha Lekha
+👩‍💻 **Author:** Rambha Rasmitha Lekha
 
 ---
 
 ## 📖 Abstract
-This project proposes a **privacy-preserving federated learning framework** for diabetes detection.  
-- Local models are trained at each client (hospital/medical center) using **Logistic Regression**.  
-- Model updates are encrypted using **Homomorphic Encryption (CKKS)** before aggregation.  
-- The global model is built securely without exposing raw patient data or intermediate updates.  
+This project implements a **privacy-preserving federated learning framework** for diabetes detection.  
 
-Our approach ensures **data confidentiality** while achieving strong predictive performance on medical datasets.
+- Each client trains a local **Logistic Regression model** on its dataset.  
+- Model updates are encrypted with **Homomorphic Encryption (CKKS)** before aggregation.  
+- A global model is built securely, without exposing raw patient data or gradients.  
+
+Our approach ensures **data confidentiality** while achieving high predictive performance on medical datasets.
 
 ---
 
 ## 🛠️ Tech Stack
-- **Language:** Python 3.x  
-- **Libraries:** PyTorch, TenSEAL, NumPy, Pandas, scikit-learn  
-- **Concepts:** Federated Learning, Homomorphic Encryption (CKKS), Logistic Regression  
+- **Languages:** Python, Flask (for web app)  
+- **Libraries:** PyTorch, TenSEAL, NumPy, Pandas, scikit-learn, Joblib  
+- **Concepts:** Federated Learning (FL), Homomorphic Encryption (HE), Logistic Regression  
 
 ---
 
 ## 📊 Dataset
 - **Pima Indians Diabetes Dataset** (UCI ML Repository)  
   - 768 samples  
-  - Features: pregnancies, glucose, blood pressure, BMI, etc.  
-  - Target: Diabetes diagnosis (1 = yes, 0 = no)  
+  - 8 numerical features (glucose, BMI, insulin, etc.)  
+  - Binary target: Diabetic (1) / Not Diabetic (0)  
 
 ---
 
@@ -39,32 +38,15 @@ Our approach ensures **data confidentiality** while achieving strong predictive 
 - **F1-Score:** ~72.5%  
 - **AUC:** 0.86  
 
-These results show stable performance across multiple clients in a federated learning setup.
+These results show **stable and reliable performance** across multiple clients in a federated setting.
 
 ---
 
-## 📂 Repository Contents
-- `Project_Report.docx` → Full project documentation  
-- `README.md` → Project summary (this file)  
-- *(Future)* `src/` → Source code for training and evaluation  
-- *(Future)* `results/` → Graphs and output plots  
+## 🖥️ Flask Web Application
+A simple Flask app is provided in the `flask_app/` folder to test the diabetes prediction model via a web interface.  
 
----
-
-## 🚀 Future Work
-- Extend framework to **deep learning models**.  
-- Add **differential privacy** to strengthen protection.  
-- Deploy as a web app for real-time predictions.  
-
----
-
-## 📜 License
-MIT License  
-
----
-
-## 📧 Contact
-If you found this useful or want to collaborate:  
-**Rambha**  
-rambhasrasmi7024@gmail.com  
-
+### 🔹 Run the app locally:
+```bash
+cd flask_app
+pip install -r requirements.txt
+python app.py
