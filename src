@@ -7,14 +7,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import tenseal as ts
 import os
-import matplotlib.pyplot as plt   # <-- Added for plotting
 
 # ---------- Config ----------
 CLIENT_DATA_PATHS = [
     "/content/diabetes_client1.csv",
-    "/content/diabetes.csv",
-    "/content/diabetes_client3.csv",
-    "/content/diabetes_client4.csv"
+    "/content/drive/MyDrive/Data/diabetes_client1.csv",
+    "/content/drive/MyDrive/Data/diabetes_client3.csv",
+    "/content/drive/MyDrive/Data/diabetes_client4.csv"
 ]
 EPOCHS = 16
 BATCH_SIZE = 16
@@ -133,10 +132,6 @@ def evaluate(model, data, target):
 print("🚀 Starting Federated Learning with Homomorphic Encryption")
 global_model = LogisticRegression(input_dim=8)
 
-# NEW: accuracy history
-client_accuracies_history = [[] for _ in range(N_CLIENTS)]
-avg_accuracies_history = []
-
 for round in range(ROUNDS):
     print(f"\n📡 Federated Round {round+1}")
     encrypted_weights = []
@@ -161,11 +156,9 @@ for round in range(ROUNDS):
         client_model = client_decrypt_and_load_model(encrypted_global_model, context)
         acc = evaluate(client_model, *clients_val_data[i])
         accuracies.append(acc)
-        client_accuracies_history[i].append(acc)   # NEW: store client accuracy
         print(f"🧪 Client {i+1} Validation Accuracy: {acc*100:.2f}%")
 
     avg_acc = np.mean(accuracies)
-    avg_accuracies_history.append(avg_acc)  # NEW: store avg accuracy
     print(f"📊 Average Validation Accuracy: {avg_acc*100:.2f}%")
 
 # ---------- Final Evaluation ----------
@@ -178,31 +171,3 @@ for i in range(N_CLIENTS):
     print(f"✅ Client {i+1} Final Accuracy: {acc*100:.2f}%")
 
 print(f"\n📊 Final Average Accuracy: {np.mean(final_accuracies)*100:.2f}%")
-
-# ---------- Plot Accuracy Graphs in a Single Row ----------
-fig, axes = plt.subplots(1, N_CLIENTS+1, figsize=(22, 5))
-
-colors = ["crimson", "goldenrod", "teal", "deepskyblue"]
-
-for i in range(N_CLIENTS):
-    axes[i].plot(range(1, ROUNDS+1), client_accuracies_history[i],
-                 color=colors[i], label=f"Client {i+1}")
-    axes[i].set_ylim(0.5, 1.0)   # fixed y-axis for consistency
-    axes[i].set_title(f"Accuracy: Client {i+1}")
-    axes[i].set_xlabel("Rounds")
-    axes[i].set_ylabel("Accuracy")
-    axes[i].legend()
-    axes[i].grid(True)
-
-axes[N_CLIENTS].plot(range(1, ROUNDS+1), avg_accuracies_history,
-                     "k--", label="Average Accuracy")
-axes[N_CLIENTS].set_ylim(0.5, 1.0)
-axes[N_CLIENTS].set_title("Average Accuracy")
-axes[N_CLIENTS].set_xlabel("Rounds")
-axes[N_CLIENTS].set_ylabel("Accuracy")
-axes[N_CLIENTS].legend()
-axes[N_CLIENTS].grid(True)
-
-plt.tight_layout()
-plt.savefig("federated_learning_accuracy.png")
-plt.show()
