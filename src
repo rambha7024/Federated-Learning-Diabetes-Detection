@@ -1,0 +1,208 @@
+import pandas as pd
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+import tenseal as ts
+import os
+import matplotlib.pyplot as plt   # <-- Added for plotting
+
+# ---------- Config ----------
+CLIENT_DATA_PATHS = [
+    "/content/diabetes_client1.csv",
+    "/content/diabetes.csv",
+    "/content/diabetes_client3.csv",
+    "/content/diabetes_client4.csv"
+]
+EPOCHS = 16
+BATCH_SIZE = 16
+LR = 0.01
+N_CLIENTS = 4
+ROUNDS = 20
+
+# ---------- Logistic Regression Model ----------
+class LogisticRegression(nn.Module):
+    def _init_(self, input_dim):
+        super(LogisticRegression, self)._init_()
+        self.linear = nn.Linear(input_dim, 1)
+
+    def forward(self, x):
+        return torch.sigmoid(self.linear(x))
+
+# ---------- Load & Preprocess Data ----------
+def load_data(file_path):
+    df = pd.read_csv(file_path)
+    X = df.drop("Outcome", axis=1).values
+    y = df["Outcome"].values
+    X = StandardScaler().fit_transform(X)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+    train_data = (
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(y_train, dtype=torch.float32).view(-1, 1),
+    )
+    val_data = (
+        torch.tensor(X_val, dtype=torch.float32),
+        torch.tensor(y_val, dtype=torch.float32).view(-1, 1),
+    )
+    return train_data, val_data
+
+clients_train_data, clients_val_data = zip(
+    *[load_data(path) for path in CLIENT_DATA_PATHS]
+)
+
+# ---------- HE Setup ----------
+def get_ckks_context():
+    context = ts.context(
+        ts.SCHEME_TYPE.CKKS,
+        poly_modulus_degree=8192,
+        coeff_mod_bit_sizes=[60, 40, 40, 60],
+    )
+    context.generate_galois_keys()
+    context.global_scale = 2**40
+    return context
+
+context = get_ckks_context()
+
+# ---------- Client Update ----------
+def client_update(model, data, target):
+    model.train()
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
+    dataset = TensorDataset(data, target)
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    for _ in range(EPOCHS):
+        for X_batch, y_batch in loader:
+            optimizer.zero_grad()
+            y_pred = model(X_batch)
+            loss = nn.BCELoss()(y_pred, y_batch)
+            loss.backward()
+            optimizer.step()
+    return model
+
+# ---------- Encrypt Model Weights ----------
+def encrypt_model_weights(model, context):
+    enc_weights = []
+    for param in model.parameters():
+        enc = ts.ckks_vector(context, param.data.view(-1).tolist())
+        enc_weights.append(enc)
+    return enc_weights
+
+# ---------- Average Encrypted Weights ----------
+def average_encrypted_weights(enc_models):
+    avg_weights = []
+    for params in zip(*enc_models):
+        summed = params[0]
+        for p in params[1:]:
+            summed += p
+        avg = summed * (1 / len(enc_models))
+        avg_weights.append(avg)
+    return avg_weights
+
+# ---------- Store Encrypted Global Model ----------
+def store_encrypted_global_model(enc_avg_weights):
+    return enc_avg_weights
+
+# ---------- Client Decryption ----------
+def client_decrypt_and_load_model(encrypted_weights, context):
+    model = LogisticRegression(input_dim=8)
+    state_dict = model.state_dict()
+    new_state = {}
+    idx = 0
+    for k, v in state_dict.items():
+        decrypted = torch.tensor(
+            encrypted_weights[idx].decrypt(), dtype=torch.float32
+        )
+        new_state[k] = decrypted.view(v.shape)
+        idx += 1
+    model.load_state_dict(new_state)
+    return model
+
+# ---------- Evaluate ----------
+def evaluate(model, data, target):
+    model.eval()
+    with torch.no_grad():
+        y_pred = model(data)
+        y_pred_cls = (y_pred > 0.5).float()
+        acc = (y_pred_cls == target).float().mean()
+        return acc.item()
+
+# ---------- Federated Training Loop ----------
+print("🚀 Starting Federated Learning with Homomorphic Encryption")
+global_model = LogisticRegression(input_dim=8)
+
+# NEW: accuracy history
+client_accuracies_history = [[] for _ in range(N_CLIENTS)]
+avg_accuracies_history = []
+
+for round in range(ROUNDS):
+    print(f"\n📡 Federated Round {round+1}")
+    encrypted_weights = []
+
+    # Clients train and encrypt
+    for i in range(N_CLIENTS):
+        local_model = LogisticRegression(input_dim=8)
+        local_model.load_state_dict(global_model.state_dict())
+        local_model = client_update(local_model, *clients_train_data[i])
+        enc_weights = encrypt_model_weights(local_model, context)
+        encrypted_weights.append(enc_weights)
+        print(f"✅ Client {i+1} finished training and encryption.")
+
+    # Server aggregation
+    avg_encrypted_weights = average_encrypted_weights(encrypted_weights)
+    encrypted_global_model = store_encrypted_global_model(avg_encrypted_weights)
+    print("🔐 Global model weights securely aggregated.")
+
+    # Validation: all clients
+    accuracies = []
+    for i in range(N_CLIENTS):
+        client_model = client_decrypt_and_load_model(encrypted_global_model, context)
+        acc = evaluate(client_model, *clients_val_data[i])
+        accuracies.append(acc)
+        client_accuracies_history[i].append(acc)   # NEW: store client accuracy
+        print(f"🧪 Client {i+1} Validation Accuracy: {acc*100:.2f}%")
+
+    avg_acc = np.mean(accuracies)
+    avg_accuracies_history.append(avg_acc)  # NEW: store avg accuracy
+    print(f"📊 Average Validation Accuracy: {avg_acc*100:.2f}%")
+
+# ---------- Final Evaluation ----------
+print("\n🎯 Final Evaluation on All Clients:")
+final_accuracies = []
+for i in range(N_CLIENTS):
+    client_model = client_decrypt_and_load_model(encrypted_global_model, context)
+    acc = evaluate(client_model, *clients_val_data[i])
+    final_accuracies.append(acc)
+    print(f"✅ Client {i+1} Final Accuracy: {acc*100:.2f}%")
+
+print(f"\n📊 Final Average Accuracy: {np.mean(final_accuracies)*100:.2f}%")
+
+# ---------- Plot Accuracy Graphs in a Single Row ----------
+fig, axes = plt.subplots(1, N_CLIENTS+1, figsize=(22, 5))
+
+colors = ["crimson", "goldenrod", "teal", "deepskyblue"]
+
+for i in range(N_CLIENTS):
+    axes[i].plot(range(1, ROUNDS+1), client_accuracies_history[i],
+                 color=colors[i], label=f"Client {i+1}")
+    axes[i].set_ylim(0.5, 1.0)   # fixed y-axis for consistency
+    axes[i].set_title(f"Accuracy: Client {i+1}")
+    axes[i].set_xlabel("Rounds")
+    axes[i].set_ylabel("Accuracy")
+    axes[i].legend()
+    axes[i].grid(True)
+
+axes[N_CLIENTS].plot(range(1, ROUNDS+1), avg_accuracies_history,
+                     "k--", label="Average Accuracy")
+axes[N_CLIENTS].set_ylim(0.5, 1.0)
+axes[N_CLIENTS].set_title("Average Accuracy")
+axes[N_CLIENTS].set_xlabel("Rounds")
+axes[N_CLIENTS].set_ylabel("Accuracy")
+axes[N_CLIENTS].legend()
+axes[N_CLIENTS].grid(True)
+
+plt.tight_layout()
+plt.savefig("federated_learning_accuracy.png")
+plt.show()
